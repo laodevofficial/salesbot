@@ -1,0 +1,51 @@
+// bot.js
+// — polls OpenSea v2 for recent sales & tweets them
+
+const axios   = require('axios');
+const config  = require('./config.js');
+const Twitter = require('twitter-lite');
+
+const client = new Twitter({
+  consumer_key:    config.twitter.consumer_key,
+  consumer_secret: config.twitter.consumer_secret,
+  access_token_key:    config.twitter.access_token_key,
+  access_token_secret: config.twitter.access_token_secret,
+});
+
+let lastTimestamp = Date.now();  // track “new since” across runs
+
+async function checkSales(firstRun = false) {
+  try {
+    const since = firstRun ? Math.floor((Date.now() - 60*60*1000)/1000) : Math.floor(lastTimestamp/1000);
+    const url = `https://api.opensea.io/v2/events/collections/${config.collection_slug}/?event_type=successful&only_opensea=false&occurred_after=${since}`;
+    const resp = await axios.get(url, {
+      headers: { 'X-API-KEY': config.opensea_apikey }
+    });
+
+    for (const ev of resp.data.asset_events || []) {
+      const soldAt   = new Date(ev.transaction.timestamp).getTime();
+      if (soldAt <= lastTimestamp) continue;
+
+      const name     = ev.asset.name;
+      const price    = Number(ev.total_price) / 1e18;       // in ETH
+      const seller   = ev.transaction.from_account.address;
+      const buyer    = ev.transaction.to_account.address;
+      const link     = ev.asset.permalink;
+
+      const tweet = `${name} sold on OpenSea for Ξ${price.toFixed(2)}\nfrom ${seller} → ${buyer}\n${link}`;
+      await client.post('statuses/update', { status: tweet });
+      console.log('Tweeted sale:', name, price);
+    }
+
+    if (resp.data.asset_events?.length) {
+      lastTimestamp = Date.now();
+    }
+  } catch (err) {
+    console.error('Error fetching sales:', err.response?.data || err.message);
+  } finally {
+    setTimeout(() => checkSales(false), 20_000);
+  }
+}
+
+console.log('🦍 Starting Lazy Apes sales bot…');
+checkSales(true);
