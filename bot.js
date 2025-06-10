@@ -28,20 +28,29 @@ async function checkSales(firstRun = false) {
       headers: { 'X-API-KEY': config.opensea_apikey }
     });
 
-    const events = resp.data.asset_events || [];
+    // support both V1 (`asset_events`) and V2 (`events`) shapes
+    const events = resp.data.asset_events || resp.data.events || [];
+
     for (const ev of events) {
+      // skip any event without asset data
+      if (!ev.asset) {
+        console.log('⚠️ Skipping event with no asset data:', ev);
+        continue;
+      }
+
       const soldAt = new Date(ev.transaction.timestamp).getTime();
       if (soldAt <= lastTimestamp) continue;
 
       const name   = ev.asset.name;
-      const price  = Number(ev.total_price) / 1e18;       // in ETH
+      const price  = Number(ev.total_price) / 1e18;  // in ETH
       const seller = ev.transaction.from_account.address;
       const buyer  = ev.transaction.to_account.address;
       const link   = ev.asset.permalink;
 
-      const tweet = `${name} sold on OpenSea for Ξ${price.toFixed(2)}\nfrom ${seller} → ${buyer}\n${link}`;
+      const tweet = `${name} sold on OpenSea for Ξ${price.toFixed(2)}\n` +
+                    `from ${seller} → ${buyer}\n${link}`;
       await client.post('statuses/update', { status: tweet });
-      console.log('Tweeted sale:', name, price);
+      console.log('✅ Tweeted sale:', name, price);
     }
 
     if (events.length) {
