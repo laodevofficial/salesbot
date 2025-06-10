@@ -64,4 +64,13 @@ async function checkSales(firstRun = false) {
 }
 
 console.log('🦍 Starting Lazy Apes sales bot…');
+checkSales(true);console.log('🦍 Starting Lazy Apes sales bot…');
+
+// 🔥 Test tweet to verify your creds & bot is alive:
+client.post('statuses/update', { status: '🐵 Sales bot is alive!' })
+  .then(() => console.log('✅ Test tweet sent'))
+  .catch(err => console.error('❌ Test tweet failed:', err));
+
+// Now start polling
 checkSales(true);
+
