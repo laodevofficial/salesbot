@@ -19,12 +19,15 @@ const tweetV2 = status => twitter.v2.tweet(status)
 
 let lastTimestamp = Date.now();
 
-// call checkSales(true) on startup, then false thereafter
-async function checkSales(firstRun = false) {
-  const sinceSec = Math.floor(lastTimestamp / 1000);
-  console.log(`👀 Polling for sales since ${new Date(sinceSec*1000).toISOString()}`);
+// call checkSales(true) on startup, then false thereafter\async function checkSales(firstRun = false) {
+  // calculate polling window (sec)
+  const sinceSec = firstRun
+    ? Math.floor((Date.now() - 60 * 60 * 1000) / 1000)  // 1h lookback on first run
+    : Math.floor(lastTimestamp / 1000);
 
-  // on first run we just reset the watermark and skip tweets
+  console.log(`👀 Polling for sales since ${new Date(sinceSec * 1000).toISOString()}`);
+
+  // on first run, set watermark and skip historic tweets
   if (firstRun) {
     lastTimestamp = Date.now();
     return setTimeout(() => checkSales(false), 20_000);
@@ -43,23 +46,28 @@ async function checkSales(firstRun = false) {
     console.log(`👀 Found ${raw.length} events`);
 
     for (const ev of raw) {
-      // figure out timestamp (ms)
+      // determine event timestamp
       const ts = ev.transaction
         ? new Date(ev.transaction.timestamp).getTime()
         : (ev.event_timestamp * 1000);
 
-      // if it’s not newer, skip
-      if (ts <= lastTimestamp) continue;
+      // skip already-processed or old
+      if (ts <= lastTimestamp) {
+        console.log(`⏭️ Skipping old event: ${new Date(ts).toISOString()}`);
+        continue;
+      }
 
-      // unify asset object
+      // unify asset data
       const asset = ev.asset || ev.nft;
-      if (!asset) continue;
+      if (!asset) {
+        console.log('⚠️ Skipping malformed event:', ev);
+        continue;
+      }
 
       // extract details
-      const name   = asset.name;
-      const link   = asset.permalink || asset.opensea_url;
+      const name = asset.name;
+      const link = asset.permalink || asset.opensea_url;
       let price, seller, buyer;
-
       if (ev.total_price) {
         price  = Number(ev.total_price) / 1e18;
         seller = ev.transaction.from_account.address;
@@ -72,15 +80,14 @@ async function checkSales(firstRun = false) {
         buyer  = ev.buyer;
       }
 
-      // compose & tweet
+      // send tweet
       const status =
         `${name} sold on OpenSea for Ξ${price.toFixed(2)}\n` +
         `from ${seller} → ${buyer}\n${link}`;
-
       await tweetV2(status);
 
-      // **only update watermark after success**
-      lastTimestamp = ts + 1;  // add 1ms so we don't re-process the same event
+      // update watermark on success
+      lastTimestamp = ts + 1;
     }
   } catch (err) {
     if (err.response?.status === 429) {
@@ -93,5 +100,6 @@ async function checkSales(firstRun = false) {
   }
 }
 
+// startup
 console.log('🦍 Starting Lazy Apes sales bot…');
 checkSales(true);
