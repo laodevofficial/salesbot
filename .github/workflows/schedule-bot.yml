@@ -1,22 +1,14 @@
-name: "🦍 Run Lazy Apes Bot"
- name: "🐵 Run Lazy Apes Bot"
-
--on:
--  schedule:
--    - cron: '*/2 * * * *'   # every 2 minutes
-+on:
-+  workflow_dispatch:       # ← enables “Run workflow” button
-+  schedule:
-+    - cron: '*/2 * * * *'   # every 2 minutes
-
+name: '🦍 Run Lazy Apes Bot'
 
 on:
+  workflow_dispatch:       # enables the “Run workflow” button
   schedule:
     - cron: '*/2 * * * *'   # every 2 minutes
 
 jobs:
   tweet:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
 
