@@ -1,4 +1,14 @@
 name: "🦍 Run Lazy Apes Bot"
+ name: "🐵 Run Lazy Apes Bot"
+
+-on:
+-  schedule:
+-    - cron: '*/2 * * * *'   # every 2 minutes
++on:
++  workflow_dispatch:       # ← enables “Run workflow” button
++  schedule:
++    - cron: '*/2 * * * *'   # every 2 minutes
+
 
 on:
   schedule:
