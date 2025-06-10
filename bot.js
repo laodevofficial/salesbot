@@ -16,28 +16,35 @@ let lastTimestamp = Date.now();  // track “new since” across runs
 
 async function checkSales(firstRun = false) {
   try {
-    const since = firstRun ? Math.floor((Date.now() - 60*60*1000)/1000) : Math.floor(lastTimestamp/1000);
-    const url = `https://api.opensea.io/api/v2/events/collection/${config.collection_slug}?event_type=successful&only_opensea=false&occurred_after=${since}&limit=20`;
+    const since = firstRun
+      ? Math.floor((Date.now() - 60 * 60 * 1000) / 1000)
+      : Math.floor(lastTimestamp / 1000);
+
+    const url =
+      `https://api.opensea.io/api/v2/events/collection/${config.collection_slug}` +
+      `?event_type=sale&only_opensea=false&occurred_after=${since}&limit=20`;
+
     const resp = await axios.get(url, {
       headers: { 'X-API-KEY': config.opensea_apikey }
     });
 
-    for (const ev of resp.data.asset_events || []) {
-      const soldAt   = new Date(ev.transaction.timestamp).getTime();
+    const events = resp.data.asset_events || [];
+    for (const ev of events) {
+      const soldAt = new Date(ev.transaction.timestamp).getTime();
       if (soldAt <= lastTimestamp) continue;
 
-      const name     = ev.asset.name;
-      const price    = Number(ev.total_price) / 1e18;       // in ETH
-      const seller   = ev.transaction.from_account.address;
-      const buyer    = ev.transaction.to_account.address;
-      const link     = ev.asset.permalink;
+      const name   = ev.asset.name;
+      const price  = Number(ev.total_price) / 1e18;       // in ETH
+      const seller = ev.transaction.from_account.address;
+      const buyer  = ev.transaction.to_account.address;
+      const link   = ev.asset.permalink;
 
       const tweet = `${name} sold on OpenSea for Ξ${price.toFixed(2)}\nfrom ${seller} → ${buyer}\n${link}`;
       await client.post('statuses/update', { status: tweet });
       console.log('Tweeted sale:', name, price);
     }
 
-    if (resp.data.asset_events?.length) {
+    if (events.length) {
       lastTimestamp = Date.now();
     }
   } catch (err) {
