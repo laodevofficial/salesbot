@@ -40,20 +40,18 @@ const checkSales = async (firstRun = false) => {
       headers: { 'X-API-KEY': config.opensea_apikey },
     });
 
+    // raw events from API
     const raw = resp.data.asset_events || resp.data.events || [];
-    console.log(`👀 Found ${raw.length} events`);
-
-    for (const ev of raw) {
-      // compute event timestamp in ms
+    // filter to only truly new sales
+    const newEvents = raw.filter(ev => {
       const ts = ev.transaction
         ? new Date(ev.transaction.timestamp).getTime()
         : ev.event_timestamp * 1000;
+      return ts > sinceSec * 1000;
+    });
+    console.log(`👀 Found ${newEvents.length} new events`);
 
-      if (ts <= lastTimestamp) {
-        console.log(`⏭️ Skipping old event: ${new Date(ts).toISOString()}`);
-        continue;
-      }
-
+    for (const ev of newEvents) {
       // unify asset data
       const asset = ev.asset || ev.nft;
       if (!asset) {
@@ -61,19 +59,21 @@ const checkSales = async (firstRun = false) => {
         continue;
       }
 
+      // compute timestamp in ms
+      const ts = ev.transaction
+        ? new Date(ev.transaction.timestamp).getTime()
+        : ev.event_timestamp * 1000;
+
       // extract details
       const name = asset.name;
       const link = asset.permalink || asset.opensea_url;
       let price, seller, buyer;
-
       if (ev.total_price) {
         price = Number(ev.total_price) / 1e18;
         seller = ev.transaction.from_account.address;
         buyer = ev.transaction.to_account.address;
       } else {
-        const qty = Number(ev.payment.quantity);
-        const dec = ev.payment.decimals;
-        price = qty / 10 ** dec;
+        price = Number(ev.payment.quantity) / 10 ** ev.payment.decimals;
         seller = ev.seller;
         buyer = ev.buyer;
       }
@@ -82,23 +82,22 @@ const checkSales = async (firstRun = false) => {
         `${name} sold on OpenSea for Ξ${price.toFixed(2)}\n` +
         `from ${seller} → ${buyer}\n${link}`;
 
-      // attempt to tweet this single sale
+      // attempt to tweet this sale
       try {
         await twitter.v2.tweet(status);
         console.log('✅ Tweet sent:', status.split('\n')[0]);
-        // advance watermark to this sale only
-        lastTimestamp = ts + 1;
-        // stop after successful tweet to respect rate limits
-        break;
+        lastTimestamp = ts + 1;  // advance watermark on success
       } catch (err) {
         if (err.code === 429) {
           console.warn('🐢 Rate limited—waiting 1m before retry');
           return setTimeout(() => checkSales(false), 60_000);
         }
         console.error('❌ Tweet failed:', err);
-        // do not bump watermark, retry this event next run
-        break;
+        // do not update watermark, retry next run
       }
+
+      // only one tweet per run to manage rate limits
+      break;
     }
   } catch (err) {
     console.error('Error fetching sales:', err.response?.data || err.message);
