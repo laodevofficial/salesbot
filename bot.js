@@ -16,7 +16,7 @@ const twitter = new TwitterApi({
 
 let lastTimestamp = Date.now();  // in ms
 
-// Poll for sales and tweet new ones
+// Poll for sales and tweet new ones (one tweet per run to avoid rate limits)
 const checkSales = async (firstRun = false) => {
   // determine window start in seconds
   const sinceSec = firstRun
@@ -82,19 +82,22 @@ const checkSales = async (firstRun = false) => {
         `${name} sold on OpenSea for Ξ${price.toFixed(2)}\n` +
         `from ${seller} → ${buyer}\n${link}`;
 
-      // try tweeting; advance watermark only on success
+      // attempt to tweet this single sale
       try {
         await twitter.v2.tweet(status);
         console.log('✅ Tweet sent:', status.split('\n')[0]);
+        // advance watermark to this sale only
         lastTimestamp = ts + 1;
+        // stop after successful tweet to respect rate limits
+        break;
       } catch (err) {
-        // rate-limit backoff
         if (err.code === 429) {
           console.warn('🐢 Rate limited—waiting 1m before retry');
           return setTimeout(() => checkSales(false), 60_000);
         }
         console.error('❌ Tweet failed:', err);
-        // do NOT bump watermark, so we retry this event next loop
+        // do not bump watermark, retry this event next run
+        break;
       }
     }
   } catch (err) {
