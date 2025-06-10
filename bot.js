@@ -17,7 +17,7 @@ let lastTimestamp = Date.now();  // track “new since” across runs
 async function checkSales(firstRun = false) {
   try {
     const since = firstRun ? Math.floor((Date.now() - 60*60*1000)/1000) : Math.floor(lastTimestamp/1000);
-    const url = `https://api.opensea.io/v2/events/collections/${config.collection_slug}/?event_type=successful&only_opensea=false&occurred_after=${since}`;
+    const url = `https://api.opensea.io/api/v2/events/collection/${config.collection_slug}?event_type=successful&only_opensea=false&occurred_after=${since}&limit=20`;
     const resp = await axios.get(url, {
       headers: { 'X-API-KEY': config.opensea_apikey }
     });
